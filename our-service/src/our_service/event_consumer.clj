@@ -4,10 +4,11 @@
     [our-service.common :as common]
     [clojure.tools.logging :as log])
   (:import
-    (org.apache.kafka.streams StreamsConfig KafkaStreams StreamsBuilder)
+    (org.apache.kafka.streams StreamsConfig KafkaStreams StreamsBuilder KeyValue)
     (org.apache.kafka.common.serialization Serdes)
-    (org.apache.kafka.streams.state Stores)
-    (our_service.util EdnSerde)))
+    (org.apache.kafka.streams.state Stores KeyValueStore)
+    (our_service.util EdnSerde)
+    (org.apache.kafka.streams.processor ProcessorContext)))
 
 ;;;
 ;;; Application
@@ -16,16 +17,24 @@
 (defn lexicographic-ordered-key [k partition offset]
   (format "%s-%04d-%030d" k partition offset))
 
-(defn encryption-key-msg [missing-store encryption-keys-store ctx k encryption-key]
+(defn encryption-key-msg [^KeyValueStore missing-store
+                          ^KeyValueStore encryption-keys-store
+                          ^ProcessorContext ctx
+                          k
+                          encryption-key]
   (.put encryption-keys-store k encryption-key)
   (let [encrypted-items (.range missing-store
                                 (lexicographic-ordered-key k 0 0)
                                 (lexicographic-ordered-key k Integer/MAX_VALUE Integer/MAX_VALUE))]
-    (doseq [encrypted-item (iterator-seq encrypted-items)]
+    (doseq [^KeyValue encrypted-item (iterator-seq encrypted-items)]
       (.delete missing-store (.key encrypted-item))
       (.forward ctx k [encryption-key (.value encrypted-item)]))))
 
-(defn encrypted-data-msg [missing-store encryption-keys-store ctx k encrypted-item]
+(defn encrypted-data-msg [^KeyValueStore missing-store
+                          ^KeyValueStore encryption-keys-store
+                          ^ProcessorContext ctx
+                          k
+                          encrypted-item]
   (if-let [encryption-key (.get encryption-keys-store k)]
     (.forward ctx k [encryption-key encrypted-item])
     (do
@@ -54,7 +63,7 @@
                       (.addStateStore waiting-for-encryption-keys-store)
 
                       (.stream ["encryption-keys" "user-info.encrypted"])
-                      (util/transform (fn [wait-for-store encryption-keys-store ctx k value]
+                      (util/transform (fn [wait-for-store encryption-keys-store ^ProcessorContext ctx k value]
                                         (let [topic (.topic ctx)
                                               f (if (= topic "encryption-keys") encryption-key-msg encrypted-data-msg)]
                                           (f wait-for-store encryption-keys-store ctx k value)

@@ -69,7 +69,7 @@
 ;;; Serialization stuff
 ;;;
 
-(deftype NotSerializeNil [edn-serializer]
+(deftype NotSerializeNil [^Serializer edn-serializer]
   Serializer
   (configure [_ configs isKey] (.configure edn-serializer configs isKey))
   (serialize [_ topic data]
@@ -89,7 +89,7 @@
   (deserializer [this]
     deserializer))
 
-(defn kafka-config [config]
+(defn ^Properties kafka-config [config]
   (doto
     (Properties.)
     (.put StreamsConfig/BOOTSTRAP_SERVERS_CONFIG "kafka1:9092")
@@ -135,7 +135,7 @@
           (close [_]))))))
 
 (defn transform
-  ([builder f store1-name store2-name]
+  (^KStream [builder f store1-name store2-name]
    (.transform builder
                (reify TransformerSupplier
                  (get [_]
