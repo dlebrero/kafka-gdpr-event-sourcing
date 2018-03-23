@@ -99,6 +99,7 @@
     (.put StreamsConfig/KEY_SERDE_CLASS_CONFIG (class (Serdes/String)))
     (.put StreamsConfig/VALUE_SERDE_CLASS_CONFIG EdnSerde)
     (.put ConsumerConfig/AUTO_OFFSET_RESET_CONFIG "earliest")
+    (.put "topic.metadata.refresh.interval.ms" "2000")
     (.putAll config)))
 
 (defn log-all-message []
