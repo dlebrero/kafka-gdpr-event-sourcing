@@ -32,7 +32,7 @@
       #(producer/send-async! @kafka-client value))))
 
 (defn forget [client]
-  (produce-edn {:topic "encryption-keys"
+  (produce-edn {:topic "gdpr"
                 :key   client
                 :value common/tombstone}))
 

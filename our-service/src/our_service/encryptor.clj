@@ -1,6 +1,8 @@
 (ns our-service.encryptor
   (:require
-    [our-service.util :as util])
+    [our-service.util :as util]
+    [our-service.common :as common]
+    [clojure.tools.logging :as log])
   (:import
     (org.apache.kafka.streams StreamsConfig KafkaStreams)
     (org.apache.kafka.streams.kstream KStreamBuilder)
@@ -27,15 +29,21 @@
 (defn encrypt [^KeyValueStore store ^ProcessorContext ctx k v]
   (let [encryption-key (get-or-create-encryption-key store ctx k)
         rc ^RecordCollector (.recordCollector ^RecordCollector$Supplier ctx)]
-    (.send rc
-           (encrypted-topic-name (.topic ctx))
-           k
-           {:val            v
-            :encryption-key encryption-key}
-           ^Long (.timestamp ctx)
-           (-> ctx .keySerde .serializer)
-           (-> ctx .valueSerde .serializer)
-           nil)))
+    (if (common/tombstone? encryption-key)
+      (log/info "Ignoring messages for a user that wanted to be forgotten" k)
+      (.send rc
+             (encrypted-topic-name (.topic ctx))
+             k
+             {:val            v
+              :encryption-key encryption-key}
+             ^Long (.timestamp ctx)
+             (-> ctx .keySerde .serializer)
+             (-> ctx .valueSerde .serializer)
+             nil))))
+
+(defn handle-gdpr [^KeyValueStore store ^ProcessorContext ctx k _]
+  (.put store k common/tombstone)
+  (.forward ctx k common/tombstone))
 
 (defn create-kafka-stream-topology []
   (let [^KStreamBuilder builder (KStreamBuilder.)
@@ -50,9 +58,14 @@
                     (.addProcessor "encryptor-processor"
                                    (util/processor #'encrypt "encryptor-state")
                                    (into-array ["to-encrypt"]))
-                    (.addStateStore store (into-array ["encryptor-processor"]))
 
-                    (.addSink "encryption-keys" "encryption-keys" (into-array ["encryptor-processor"])))]
+                    (.addSource "gdpr" (into-array ["gdpr"]))
+                    (.addProcessor "gdpr-processor"
+                                   (util/processor #'handle-gdpr "encryptor-state")
+                                   (into-array ["gdpr"]))
+
+                    (.addStateStore store (into-array ["encryptor-processor" "gdpr-processor"]))
+                    (.addSink "encryption-keys" "encryption-keys" (into-array ["encryptor-processor" "gdpr-processor"])))]
     builder))
 
 (defn start-kafka-streams []

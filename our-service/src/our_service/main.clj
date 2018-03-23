@@ -33,3 +33,14 @@
                                 (wrap-params web)
                                 {:port  80
                                  :join? false})})))
+
+
+(comment
+
+  (.close (:encryptor @state))
+  (def e (encryptor/start-kafka-streams))
+
+  (.close (:consumer @state))
+  (def c (event-consumer/start-kafka-streams))
+
+  )
