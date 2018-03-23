@@ -28,7 +28,10 @@
                                 (lexicographic-ordered-key k Integer/MAX_VALUE Integer/MAX_VALUE))]
     (doseq [^KeyValue encrypted-item (iterator-seq encrypted-items)]
       (.delete missing-store (.key encrypted-item))
-      (.forward ctx k [encryption-key (.value encrypted-item)]))))
+      (when-not (common/tombstone? encryption-key)
+        (.forward ctx k [encryption-key (.value encrypted-item)])))
+    (when (common/tombstone? encryption-key)
+      (.forward ctx k [encryption-key nil]))))
 
 (defn encrypted-data-msg [^KeyValueStore missing-store
                           ^KeyValueStore encryption-keys-store
@@ -85,7 +88,7 @@
                       (.reduce (util/reducer [v1 v2]
                                  (if (or (common/tombstone? v1)
                                          (common/tombstone? v2))
-                                   v1
+                                   common/tombstone
                                    (str v1 "," v2)))))]
     [builder decrypted]))
 
