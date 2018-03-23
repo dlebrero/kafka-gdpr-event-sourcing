@@ -44,10 +44,10 @@
 (defn api []
   (routes
     (POST "/set-data" [client name]
-      (set-data client {:name name})
+      (set-data client name)
       {:status 200
        :body   (pr-str "done!")})
-    (POST "/forget-me!" [client]
+    (POST "/forget-me" [client]
       (forget client)
       {:status 200
        :body   (pr-str "done!")})))
