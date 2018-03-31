@@ -8,7 +8,8 @@
     (org.apache.kafka.common.serialization Serdes)
     (org.apache.kafka.streams.state Stores KeyValueStore)
     (our_service.util EdnSerde)
-    (org.apache.kafka.streams.processor ProcessorContext)))
+    (org.apache.kafka.streams.processor ProcessorContext)
+    (org.apache.kafka.streams.kstream KStream)))
 
 ;;;
 ;;; Application
@@ -44,13 +45,9 @@
       (log/info "missing" k)
       (.put missing-store (lexicographic-ordered-key k (.partition ctx) (.offset ctx)) encrypted-item))))
 
-;;;
-;;; Create topology, but do not start it
-;;;
-(defn create-kafka-stream-topology []
-  (let [^StreamsBuilder builder (StreamsBuilder.)
 
-        encryption-keys-store-name "encryption-keys-local"
+(defn ^KStream decrypt [^StreamsBuilder builder topic]
+  (let [encryption-keys-store-name "encryption-keys-local"
         encryption-keys-store (-> (Stores/keyValueStoreBuilder (Stores/persistentKeyValueStore encryption-keys-store-name)
                                                                (Serdes/String) (EdnSerde.))
                                   .withCachingEnabled
@@ -60,30 +57,36 @@
         waiting-for-encryption-keys-store (-> (Stores/keyValueStoreBuilder
                                                 (Stores/persistentKeyValueStore waiting-for-encryption-keys-store-name)
                                                 (Serdes/String) (EdnSerde.))
-                                              .withCachingEnabled)
+                                              .withCachingEnabled)]
+    (-> builder
+        (.addStateStore encryption-keys-store)
+        (.addStateStore waiting-for-encryption-keys-store)
+
+        (.stream ["encryption-keys" topic])
+        (util/transform (fn [wait-for-store encryption-keys-store ^ProcessorContext ctx k value]
+                          (let [topic (.topic ctx)
+                                f (if (= topic "encryption-keys") encryption-key-msg encrypted-data-msg)]
+                            (f wait-for-store encryption-keys-store ctx k value)
+                            nil))
+                        waiting-for-encryption-keys-store-name encryption-keys-store-name)
+
+        (.mapValues (util/val-mapper [encryption-key encrypted-item]
+                                     (cond
+                                       (common/tombstone? encryption-key)
+                                       encryption-key
+
+                                       (= encryption-key (:encryption-key encrypted-item))
+                                       (:val encrypted-item)
+
+                                       :else
+                                       (throw (RuntimeException. (str "Encryption key for " encrypted-item " do not match '" encryption-key "'")))))))))
+;;;
+;;; Create topology, but do not start it
+;;;
+(defn create-kafka-stream-topology []
+  (let [^StreamsBuilder builder (StreamsBuilder.)
         decrypted (-> builder
-                      (.addStateStore encryption-keys-store)
-                      (.addStateStore waiting-for-encryption-keys-store)
-
-                      (.stream ["encryption-keys" "user-info.encrypted"])
-                      (util/transform (fn [wait-for-store encryption-keys-store ^ProcessorContext ctx k value]
-                                        (let [topic (.topic ctx)
-                                              f (if (= topic "encryption-keys") encryption-key-msg encrypted-data-msg)]
-                                          (f wait-for-store encryption-keys-store ctx k value)
-                                          nil))
-                                      waiting-for-encryption-keys-store-name encryption-keys-store-name)
-
-                      (.mapValues (util/val-mapper [encryption-key encrypted-item]
-                                                   (cond
-                                                     (common/tombstone? encryption-key)
-                                                     encryption-key
-
-                                                     (= encryption-key (:encryption-key encrypted-item))
-                                                     (:val encrypted-item)
-
-                                                     :else
-                                                     (throw (RuntimeException. (str "Encryption key for " encrypted-item " do not match '" encryption-key "'"))))))
-
+                      (decrypt "user-info.encrypted")
                       (.groupByKey)
                       (.reduce (util/reducer [v1 v2]
                                  (if (or (common/tombstone? v1)
