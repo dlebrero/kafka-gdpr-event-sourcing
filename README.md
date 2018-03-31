@@ -24,7 +24,7 @@ You will see in the logs that the event-consumer logs something like:
     
 To exercise the "right to erasure":
  
-     curl --data "client=id1" -X POST http://localhost:3004//forget-me
+     curl --data "client=id1" -X POST http://localhost:3004/forget-me
 
 Which should result on the event-consummer logging:
 
