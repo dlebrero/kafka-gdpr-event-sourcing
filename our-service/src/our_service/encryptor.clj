@@ -15,10 +15,13 @@
 ;;; Application
 ;;;
 
+(defn generate-encryption-key []
+  (rand-int 10000000))
+
 (defn get-or-create-encryption-key [^KeyValueStore store ^ProcessorContext ctx k]
   (if-let [encryption-key (.get store k)]
     encryption-key
-    (let [new-encryption-key (rand-int 10000000)]
+    (let [new-encryption-key (generate-encryption-key)]
       (.put store k new-encryption-key)
       (.forward ctx k new-encryption-key "encryption-keys")
       new-encryption-key)))
