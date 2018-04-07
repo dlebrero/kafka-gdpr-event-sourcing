@@ -1,6 +1,6 @@
 # Kafka Streams, GDPR and Event Sourcing
 
-This code is the companion of the blog post [Kafka, GDPR and Event Sourcing](http://danlebrero.com/)
+This code is the companion of the blog post [Kafka, GDPR and Event Sourcing](http://danlebrero.com/2018/04/11/kafka-gdpr-event-sourcing)
 
 This project uses Docker to create a cluster of 3 microservices that consume from a Kafka topic using the
 Kafka Streams API.
