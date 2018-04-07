@@ -24,9 +24,9 @@
                           k
                           encryption-key]
   (.put encryption-keys-store k encryption-key)
-  (let [encrypted-items (.range missing-store
-                                (lexicographic-ordered-key k 0 0)
-                                (lexicographic-ordered-key k Integer/MAX_VALUE Integer/MAX_VALUE))]
+  (with-open [encrypted-items (.range missing-store
+                                      (lexicographic-ordered-key k 0 0)
+                                      (lexicographic-ordered-key k Integer/MAX_VALUE Integer/MAX_VALUE))]
     (doseq [^KeyValue encrypted-item (iterator-seq encrypted-items)]
       (.delete missing-store (.key encrypted-item))
       (when-not (common/tombstone? encryption-key)
